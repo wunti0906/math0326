@@ -32,8 +32,48 @@ def index():
     link += "<a href=/math>數學運算(次方/根號)</a><hr>"
     link += "<br><a href=/read>讀取Firestore資料</a><br>"
     link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
-    link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
+    link += "<br><a href=/search>搜尋老師資料(輸入姓名)</a><br>"
+    link += "<br><a href=/spider>執行爬蟲：抓取老師課程連結</a><br>"
     return link
+
+
+@app.route("/spider")
+def spider():
+    import requests
+    from bs4 import BeautifulSoup
+
+    url = "https://www1.pu.edu.tw/~tcyang/course.html"
+    try:
+        Data = requests.get(url)
+        Data.encoding = "utf-8"
+        sp = BeautifulSoup(Data.text, "html.parser")
+        result = sp.select(".team-box a")
+        
+        # 建立簡單的 HTML 表格顯示結果
+        info = "<h2>爬蟲結果：靜宜老師課程資料</h2>"
+        info += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>"
+        info += "<tr><th>老師姓名</th><th>課程連結</th></tr>"
+        
+        for i in result:
+            name = i.text.strip()
+            href = i.get("href")
+            # 處理相對連結，補足完整網址
+            if href.startswith("http"):
+                full_url = href
+            else:
+                full_url = "https://www1.pu.edu.tw/~tcyang/" + href
+            
+            info += f"<tr><td>{name}</td><td><a href='{full_url}' target='_blank'>{full_url}</a></td></tr>"
+        
+        info += "</table>"
+    except Exception as e:
+        info = f"抓取資料時發生錯誤：{e}"
+    
+    return info + "<br><br><a href='/'>返回首頁</a>"
+
+
+
+
 
 @app.route("/search", methods=["GET", "POST"])
 def search():
