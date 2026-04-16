@@ -1,22 +1,24 @@
-from flask import Flask, render_template,request
+from flask import Flask, render_template, request
 from datetime import datetime
-
 import os
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # 判斷是在 Vercel 還是本地
-if os.path.exists('serviceAccountKey.json'):
-    # 本地環境：讀取檔案
-    cred = credentials.Certificate('serviceAccountKey.json')
-else:
-    # 雲端環境：從環境變數讀取 JSON 字串
-    firebase_config = os.getenv('FIREBASE_CONFIG')
-    cred_dict = json.loads(firebase_config)
-    cred = credentials.Certificate(cred_dict)
+if not firebase_admin._apps:  # 加入檢查避免重複啟動
+    if os.path.exists('serviceAccountKey.json'):
+        cred = credentials.Certificate('serviceAccountKey.json')
+    else:
+        firebase_config = os.getenv('FIREBASE_CONFIG')
+        if firebase_config:
+            cred_dict = json.loads(firebase_config)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            raise ValueError("找不到 Firebase 設定！")
+    firebase_admin.initialize_app(cred)
 
-firebase_admin.initialize_app(cred)
+db = firestore.client()
 app = Flask(__name__)
 
 @app.route("/")
@@ -29,21 +31,44 @@ def index():
     link += "<a href=/account>POST傳值</a><hr>"
     link += "<a href=/math>數學運算(次方/根號)</a><hr>"
     link += "<br><a href=/read>讀取Firestore資料</a><br>"
+    link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
     return link
+
+@app.route("/read2")
+def read2():
+    Result = ""
+    keyword = "楊"
+    collection_ref = db.collection("靜宜資管")
+    docs = collection_ref.get()
+    for doc in docs:         
+        teacher = doc.to_dict()
+        # 修正篩選邏輯：檢查姓名裡是否有關鍵字
+        if "name" in teacher and keyword in teacher["name"]:
+            Result += f"姓名：{teacher.get('name')}，研究室：{teacher.get('lab')}，郵件：{teacher.get('mail')}<br>"
+    
+    if Result == "":
+        Result = "抱歉查無此關鍵字姓名之老師資料"
+    
+    return Result + "<br><a href=/>返回首頁</a>"
 
 @app.route("/read")
 def read():
     Result = ""
     db = firestore.client()
-    collection_ref = db.collection("靜宜資管")
-    
-    # 加入 order_by("欄位", direction=排序方式)
-    # DESCENDING 代表由大到小（降序）
-    docs = collection_ref.order_by("lab", direction=firestore.Query.DESCENDING).get()
-    
-    for doc in docs:         
-        Result += str(doc.to_dict()) + "<br>"    
+    collection_ref = db.collection("靜宜資管")    
+    docs = collection_ref.get()    
+   
+    data_list = []
+    for doc in docs:
+        data_list.append(doc.to_dict())
+   
+    sorted_data = sorted(data_list, key=lambda x: x.get('lab', 0), reverse=True)
+   
+    for item in sorted_data:
+        Result += str(item) + "<br>"
+       
     return Result
+
 
 @app.route("/mis")
 def course():
@@ -79,25 +104,18 @@ def account():
 def math_calc():
     if request.method == "POST":
         try:
-            # 取得表單傳過來的數值
             x = float(request.form["x"])
             y = float(request.form["y"])
             opt = request.form["opt"]
-            
             if opt == "∧":
                 result = x ** y
             elif opt == "√":
-                if y == 0:
-                    result = "錯誤：數學上不能開 0 次方根"
-                else:
-                    result = x ** (1/y)
+                result = "錯誤：數學上不能開 0 次方根" if y == 0 else x ** (1/y)
             return f"<h1>計算結果：{result}</h1><a href='/math'>重新計算</a> | <a href='/'>回首頁</a>"
         except Exception as e:
             return f"發生錯誤：{e} <br><a href='/math'>返回</a>"
     else:
-        # GET 請求時，顯示放在 templates 裡的 HTML 檔案
         return render_template("math.html")
-
 
 if __name__ == "__main__":
     app.run(debug=True)
