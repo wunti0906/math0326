@@ -32,7 +32,36 @@ def index():
     link += "<a href=/math>數學運算(次方/根號)</a><hr>"
     link += "<br><a href=/read>讀取Firestore資料</a><br>"
     link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
+    link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
     return link
+
+@app.route("/search", methods=["GET", "POST"])
+def search():
+    if request.method == "POST":
+        keyword = request.form.get("keyword")
+        Result = f"<h3>關鍵字「{keyword}」的查詢結果：</h3><hr>"
+        
+        collection_ref = db.collection("靜宜資管")
+        docs = collection_ref.get()
+        
+        found = False
+        for doc in docs:
+            teacher = doc.to_dict()
+            # 確保 'name' 鍵值存在且包含關鍵字
+            if "name" in teacher and keyword in teacher["name"]:
+                found = True
+                Result += f"姓名：{teacher.get('name')}<br>"
+                Result += f"研究室：{teacher.get('lab')}<br>"
+                Result += f"郵件：{teacher.get('mail')}<br><hr>"
+        
+        if not found:
+            Result = f"<h3>抱歉，查無關於「{keyword}」的資料。</h3>"
+            
+        return Result + "<br><a href='/search'>重新搜尋</a> | <a href='/'>返回首頁</a>"
+    else:
+        # 如果是 GET 請求，則顯示輸入表單
+        return render_template("search.html")
+
 
 @app.route("/read2")
 def read2():
@@ -40,15 +69,15 @@ def read2():
     keyword = "楊"
     collection_ref = db.collection("靜宜資管")
     docs = collection_ref.get()
-    for doc in docs:         
+    for doc in docs:        
         teacher = doc.to_dict()
         # 修正篩選邏輯：檢查姓名裡是否有關鍵字
         if "name" in teacher and keyword in teacher["name"]:
             Result += f"姓名：{teacher.get('name')}，研究室：{teacher.get('lab')}，郵件：{teacher.get('mail')}<br>"
-    
+   
     if Result == "":
         Result = "抱歉查無此關鍵字姓名之老師資料"
-    
+   
     return Result + "<br><a href=/>返回首頁</a>"
 
 @app.route("/read")
@@ -66,7 +95,6 @@ def read():
    
     for item in sorted_data:
         Result += str(item) + "<br>"
-       
     return Result
 
 
@@ -95,7 +123,7 @@ def account():
     if request.method == "POST":
         user = request.form["user"]
         pwd = request.form["pwd"]
-        result = "您輸入的帳號是：" + user + "; 密碼為：" + pwd 
+        result = "您輸入的帳號是：" + user + "; 密碼為：" + pwd
         return result
     else:
         return render_template("account.html")
