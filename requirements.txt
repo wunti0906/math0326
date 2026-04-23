@@ -1,4 +1,4 @@
 flask
 firebase-admin
-beautifulsoup4
 requests
+beautifulsoup4
