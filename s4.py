@@ -4,11 +4,8 @@ from bs4 import BeautifulSoup
 url = "https://math0326.vercel.app/me"
 Data = requests.get(url)
 Data.encoding = "utf-8"
-
 # print(Data.text)
-sp = BeautifulSoup(Data.text, "html.parser")
-result = sp.select("td")
 
-for i in result:
-    print(i.text)
-    print()
+sp = BeautifulSoup(Data.text, "html.parser")
+result = sp.find(id="h2text")
+print(result.text)

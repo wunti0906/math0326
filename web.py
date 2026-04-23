@@ -1,3 +1,6 @@
+import requests
+from bs4 import BeautifulSoup
+
 from flask import Flask, render_template, request
 from datetime import datetime
 import os
@@ -32,44 +35,63 @@ def index():
     link += "<a href=/math>數學運算(次方/根號)</a><hr>"
     link += "<br><a href=/read>讀取Firestore資料</a><br>"
     link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
-    link += "<br><a href=/search>搜尋老師資料(輸入姓名)</a><br>"
-    link += "<br><a href=/spider>執行爬蟲：抓取老師課程連結</a><br>"
+    link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
+    link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
+    link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
+    link += "<br><a href=/movie1>爬取電影資料 (movie1)</a><br>"
     return link
 
 
-@app.route("/spider")
-def spider():
-    import requests
-    from bs4 import BeautifulSoup
 
-    url = "https://www1.pu.edu.tw/~tcyang/course.html"
-    try:
-        Data = requests.get(url)
-        Data.encoding = "utf-8"
-        sp = BeautifulSoup(Data.text, "html.parser")
-        result = sp.select(".team-box a")
-        
-        # 建立簡單的 HTML 表格顯示結果
-        info = "<h2>爬蟲結果：靜宜老師課程資料</h2>"
-        info += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>"
-        info += "<tr><th>老師姓名</th><th>課程連結</th></tr>"
-        
-        for i in result:
-            name = i.text.strip()
-            href = i.get("href")
-            # 處理相對連結，補足完整網址
-            if href.startswith("http"):
-                full_url = href
-            else:
-                full_url = "https://www1.pu.edu.tw/~tcyang/" + href
-            
-            info += f"<tr><td>{name}</td><td><a href='{full_url}' target='_blank'>{full_url}</a></td></tr>"
-        
-        info += "</table>"
-    except Exception as e:
-        info = f"抓取資料時發生錯誤：{e}"
+
+@app.route("/movie1", methods=["GET", "POST"])  # 記得加入 methods
+def movie1():
+    # 1. 取得使用者搜尋的關鍵字
+    query = request.values.get("query", "")
     
-    return info + "<br><br><a href='/'>返回首頁</a>"
+    # 2. 在頁面最上方加入搜尋表單 HTML
+    R = "<h2>即將上映電影搜尋</h2>"
+    R += f"""
+    <form action="/movie1" method="get">
+        <input type="text" name="query" value="{query}" placeholder="輸入電影關鍵字...">
+        <button type="submit">搜尋</button>
+    </form><br><hr>
+    """
+    
+    url = "https://www.atmovies.com.tw/movie/next/"
+    
+    try:
+        data = requests.get(url)
+        data.encoding = "utf-8"
+        sp = BeautifulSoup(data.text, "html.parser")
+        result = sp.select(".filmListAllX li")
+        
+        for item in result:
+            img_tag = item.find("img")
+            link_tag = item.find("a")
+            
+            if img_tag and link_tag:
+                name = img_tag.get("alt")
+                
+                # --- 篩選邏輯：如果使用者有輸入關鍵字，只顯示符合的電影 ---
+                if query and query not in name:
+                    continue 
+                
+                link = "https://www.atmovies.com.tw" + link_tag.get("href")
+                raw_img = img_tag.get("src")
+                img_src = raw_img if raw_img.startswith("http") else "https://www.atmovies.com.tw" + raw_img
+                
+                R += f"<img src='{img_src}' width='150' style='display:block; margin-bottom:10px;'>"
+                R += f"電影名稱：<strong>{name}</strong><br>"
+                R += f"介紹連結：<a href='{link}' target='_blank'>點我觀看</a><hr>"
+        
+        if not result:
+            R += "暫時抓不到電影資料。"
+            
+    except Exception as e:
+        R = f"發生錯誤：{e}"
+
+    return R + "<br><a href='/'>返回首頁</a>"
 
 
 
@@ -80,10 +102,10 @@ def search():
     if request.method == "POST":
         keyword = request.form.get("keyword")
         Result = f"<h3>關鍵字「{keyword}」的查詢結果：</h3><hr>"
-        
+       
         collection_ref = db.collection("靜宜資管")
         docs = collection_ref.get()
-        
+       
         found = False
         for doc in docs:
             teacher = doc.to_dict()
@@ -93,14 +115,15 @@ def search():
                 Result += f"姓名：{teacher.get('name')}<br>"
                 Result += f"研究室：{teacher.get('lab')}<br>"
                 Result += f"郵件：{teacher.get('mail')}<br><hr>"
-        
+       
         if not found:
             Result = f"<h3>抱歉，查無關於「{keyword}」的資料。</h3>"
-            
+           
         return Result + "<br><a href='/search'>重新搜尋</a> | <a href='/'>返回首頁</a>"
     else:
         # 如果是 GET 請求，則顯示輸入表單
         return render_template("search.html")
+
 
 
 @app.route("/read2")
@@ -135,6 +158,7 @@ def read():
    
     for item in sorted_data:
         Result += str(item) + "<br>"
+       
     return Result
 
 

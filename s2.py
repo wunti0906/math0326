@@ -5,10 +5,9 @@ url = "https://math0326.vercel.app/me"
 Data = requests.get(url)
 Data.encoding = "utf-8"
 
-# print(Data.text)
 sp = BeautifulSoup(Data.text, "html.parser")
-result = sp.select("td")
+result = sp.find_all("td") 
 
-for i in result:
-    print(i.text)
+for item in result:
+    print(item.text.strip())
     print()
