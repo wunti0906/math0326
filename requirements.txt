@@ -1,4 +1,4 @@
-flask
-firebase-admin
+Flask
 requests
 beautifulsoup4
+firebase-admin

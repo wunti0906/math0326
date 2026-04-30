@@ -38,9 +38,109 @@ def index():
     link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
     link += "<br><a href=/read2>讀取Firestore資料(根據姓名關鍵字'楊')</a><br>"
     link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
-    link += "<br><a href=/movie1>爬取電影資料 (movie1)</a><br>"
+    link += "<br><a href=/movie1>爬取電影資料 (即時爬取展示)</a><hr>"
+    link += "<a href='/spiderMovie'>爬取並更新電影資料到資料庫</a><br>"
+    link += "<br><a href='/searchMovie'>搜尋資料庫中的電影</a><br>"
     return link
 
+
+# --- (1) spiderMovie: 爬取並存到資料庫 ---
+@app.route("/spiderMovie")
+def spiderMovie():
+    url = "https://www.atmovies.com.tw/movie/next/"
+    data = requests.get(url)
+    data.encoding = "utf-8"
+    sp = BeautifulSoup(data.text, "html.parser")
+    result = sp.select(".filmListAllX li")
+    
+    count = 0
+    for item in result:
+        img_tag = item.find("img")
+        link_tag = item.find("a")
+        
+        if img_tag and link_tag:
+            name = img_tag.get("alt")
+            link = "https://www.atmovies.com.tw" + link_tag.get("href")
+            raw_img = img_tag.get("src")
+            # 處理相對路徑圖片
+            img_src = raw_img if raw_img.startswith("http") else "https://www.atmovies.com.tw" + raw_img
+            
+            # --- 強化日期抓取邏輯 ---
+            item_text = item.get_text()
+            if "上映日期：" in item_text:
+                # 取得「上映日期：」之後的內容，並取第一段連續字元(即日期)
+                release_date = item_text.split("上映日期：")[1].strip().split()[0]
+            else:
+                release_date = "暫無資料"
+
+            doc_data = {
+                "title": name,
+                "poster": img_src,
+                "link": link,
+                "releaseDate": release_date,
+                "updateTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            # 寫入 Firestore，以片名為 ID 可避免重複爬取產生多筆相同資料
+            db.collection("UpcomingMovies").document(name).set(doc_data)
+            count += 1
+            
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    R = f"<h2>爬取完成！</h2>"
+    R += f"最近更新日期：{now}<br>"
+    R += f"本次共爬取並成功存儲：{count} 部電影資料到資料庫。<br><br>"
+    R += "<a href='/'>返回首頁</a>"
+    return R
+
+
+# --- (2) searchMovie: 搜尋資料庫中的電影 ---
+@app.route("/searchMovie", methods=["GET", "POST"])
+def searchMovie():
+    if request.method == "POST":
+        keyword = request.form.get("keyword")
+        # 從 Firestore 的 "UpcomingMovies" 集合取得所有文件
+        collection_ref = db.collection("UpcomingMovies")
+        docs = collection_ref.get()
+        
+        # 建立結果頁面的 HTML
+        Result = f"<h2>關鍵字「{keyword}」的查詢結果：</h2><hr>"
+        index_num = 1
+        found = False
+        
+        for doc in docs:
+            movie = doc.to_dict()
+            # 模糊搜尋：檢查關鍵字是否在電影標題中
+            if keyword in movie.get("title", ""):
+                found = True
+                Result += f"<b>編號：{index_num}</b><br>"
+                Result += f"片名：<strong>{movie.get('title')}</strong><br>"
+                
+                # 海報顯示 (固定寬度以便排版)
+                poster_url = movie.get('poster')
+                Result += f"海報：<br><img src='{poster_url}' width='150' style='margin: 10px 0;'><br>"
+                
+                # 上映日期
+                Result += f"上映日期：{movie.get('releaseDate')}<br>"
+                
+                # 介紹頁連結 (另開視窗)
+                Result += f"介紹頁：<a href='{movie.get('link')}' target='_blank'>點我觀看電影詳細資訊</a><hr>"
+                
+                index_num += 1
+        
+        if not found:
+            Result += f"<p>抱歉，資料庫中找不到包含「{keyword}」的電影。</p>"
+            
+        return Result + "<br><a href='/searchMovie'>重新搜尋</a> | <a href='/'>返回首頁</a>"
+    else:
+        # GET 請求時顯示搜尋表單
+        html = """
+        <h2>搜尋資料庫電影</h2>
+        <form method="post">
+            請輸入片名關鍵字：<input type="text" name="keyword" placeholder="例如：復仇者" required>
+            <button type="submit">開始查詢</button>
+        </form><br>
+        <a href='/'>返回首頁</a>
+        """
+        return html
 
 
 
