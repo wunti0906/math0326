@@ -1,12 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-
 from flask import Flask, render_template, request
 from datetime import datetime
 import os
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
+import urllib3
+import time  # <--- 確保這行一定要有！
+
 
 # 判斷是在 Vercel 還是本地
 if not firebase_admin._apps:  # 加入檢查避免重複啟動
@@ -26,7 +28,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    link = "<h1>歡迎進入林彣媞的網站20260409</h1>"
+    link = "<h1>歡迎進入林彣媞的網站</h1>"
     link += "<a href=/mis>課程</a><hr>"
     link += "<a href=/today>現在日期時間</a><hr>"
     link += "<a href=/me>關於我</a><hr>"
@@ -40,50 +42,95 @@ def index():
     link += "<br><a href='/search'>搜尋老師資料(輸入關鍵字)</a><br>"
     link += "<br><a href=/movie1>爬取電影資料 (即時爬取展示)</a><hr>"
     link += "<a href='/spiderMovie'>爬取並更新電影資料到資料庫</a><br>"
-    link += "<br><a href='/searchMovie'>搜尋資料庫中的電影</a><br>"
-    link += "<br><a href='/road'>台中市十大肇事路口</a><hr>"
+    link += "<br><a href='/searchMovie'>搜尋資料庫中的電影</a><hr>"
+    link += "<br><a href='/road'>台中市十大肇事路口</a><br>"
+    link += "<br><a href='/road1'>肇事路口查詢 (進階表單版)</a><hr>"
     return link
-
 
 
 @app.route("/road", methods=["GET", "POST"])
 def road():
-    if request.method == "POST":
-        road_name = request.form.get("road_name")
+    # 加上你的名字
+    R = "<h1>十大肇事路口(113年10月)林彣媞</h1><br>"
+    url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    try:
+        # verify=False 解決憑證問題, timeout=10 防止卡死
+        response = requests.get(url, headers=headers, verify=False, timeout=10)
+        JsonData = response.json()
+        
+        # 取得網址參數 q
+        Road_query = request.args.get("q", "")
+        found = False
+        
+        for item in JsonData:
+            if Road_query and Road_query in item.get("路口名稱", ""):
+                R += f"📍 <b>{item['路口名稱']}</b>，原因：{item['主要肇因']} <br>"
+                found = True
+        
+        if not found:
+            if Road_query == "":
+                R += "<i>請在網址後加上 ?q=路名 來搜尋，或查看下方前 10 筆列表：</i><br><br>"
+                for item in JsonData[:10]:
+                    R += f"• {item['路口名稱']} <br>"
+            else:
+                R += f"抱歉，查無關於「{Road_query}」的相關資料！<br>"
+    except Exception as e:
+        R += f"<div style='color:red;'>連線錯誤：{str(e)}</div>"
+
+    R += "<br><hr><a href='/'>回首頁</a>"
+    return R
+
+# --- (2) 肇事路口：進階表單版 (表格美化) ---
+@app.route("/road1", methods=["GET", "POST"])
+def road1():
+    # 使用 request.values 可以同時接收 GET 和 POST 的 q
+    q = request.values.get("q", "")
+    results = ""
+    
+    if q:
         url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
+        headers = {'User-Agent': 'Mozilla/5.0'}
         
-        # 加入 Headers 模擬瀏覽器，這非常重要！
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-        
-        try:
-            # 加入 headers 與 timeout，並關閉 ssl 驗證(若對方證書過期)
-            res = requests.get(url, headers=headers, timeout=15, verify=True)
-            res.raise_for_status()
-            
-            json_data = res.json()
-            result_str = f"<h3>「{road_name}」查詢結果：</h3><hr>"
-            found = False
-            for item in json_data:
-                if road_name in item.get("路口名稱", ""):
-                    found = True
-                    result_str += f"<b>{item['路口名稱']}</b><br>總件數：{item['總件數']}<br>主要肇因：{item['主要肇因']}<hr>"
-            
-            if not found:
-                result_str = f"抱歉，在資料中找不到包含「{road_name}」的路口。"
-            return result_str + "<a href='/road'>再次查詢</a> | <a href='/'>首頁</a>"
-            
-        except Exception as e:
-            # 顯示詳細錯誤，方便除錯
-            return f"連線 API 失敗：{str(e)} <br>請稍後再試，或檢查 API 網址是否變更。<br><a href='/road'>返回重試</a>"
-            
-    return '<h2>台中市十大肇事路口查詢</h2><form method="post">請輸入路名：<input name="road_name" placeholder="例如: 台灣大道" required><button type="submit">查詢</button></form>'
+        # 重試機制
+        for i in range(3):
+            try:
+                res = requests.get(url, headers=headers, timeout=15, verify=False)
+                json_data = res.json()
+                found = False
+                
+                # 建立表格 HTML
+                results = "<h3>查詢結果：</h3><table border='1' style='border-collapse:collapse; width:100%; text-align:left;'>"
+                results += "<tr style='background-color:#f2f2f2;'><th>路口名稱</th><th>件數</th><th>原因</th></tr>"
+                
+                for item in json_data:
+                    if q in item.get("路口名稱", ""):
+                        found = True
+                        results += f"<tr><td>{item['路口名稱']}</td><td>{item.get('總件數', 'N/A')}</td><td>{item.get('主要肇因', 'N/A')}</td></tr>"
+                results += "</table>"
+                
+                if not found: 
+                    results = f"<p style='color:orange;'>查無關於「{q}」的資料。</p>"
+                break # 成功則跳出迴圈
+                
+            except Exception as e:
+                if i < 2: # 還有重試機會
+                    time.sleep(1)
+                else:
+                    results = f"<div style='color:red;'>連線失敗：{str(e)}</div>"
 
-
-
-
-
+    html = f"""
+    <h1>台中市易肇事路口查詢 (林彣媞)</h1>
+    <form action="/road1" method="get">
+        請輸入路名：<input type="text" name="q" value="{q}">
+        <button type="submit">查詢</button>
+    </form>
+    <hr>
+    {results}
+    <br><a href="/">回首頁</a>
+    """
+    return html
 
 
 
