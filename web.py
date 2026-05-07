@@ -41,7 +41,50 @@ def index():
     link += "<br><a href=/movie1>爬取電影資料 (即時爬取展示)</a><hr>"
     link += "<a href='/spiderMovie'>爬取並更新電影資料到資料庫</a><br>"
     link += "<br><a href='/searchMovie'>搜尋資料庫中的電影</a><br>"
+    link += "<br><a href='/road'>台中市十大肇事路口</a><hr>"
     return link
+
+
+
+@app.route("/road", methods=["GET", "POST"])
+def road():
+    if request.method == "POST":
+        road_name = request.form.get("road_name")
+        url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
+        
+        # 加入 Headers 模擬瀏覽器，這非常重要！
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        try:
+            # 加入 headers 與 timeout，並關閉 ssl 驗證(若對方證書過期)
+            res = requests.get(url, headers=headers, timeout=15, verify=True)
+            res.raise_for_status()
+            
+            json_data = res.json()
+            result_str = f"<h3>「{road_name}」查詢結果：</h3><hr>"
+            found = False
+            for item in json_data:
+                if road_name in item.get("路口名稱", ""):
+                    found = True
+                    result_str += f"<b>{item['路口名稱']}</b><br>總件數：{item['總件數']}<br>主要肇因：{item['主要肇因']}<hr>"
+            
+            if not found:
+                result_str = f"抱歉，在資料中找不到包含「{road_name}」的路口。"
+            return result_str + "<a href='/road'>再次查詢</a> | <a href='/'>首頁</a>"
+            
+        except Exception as e:
+            # 顯示詳細錯誤，方便除錯
+            return f"連線 API 失敗：{str(e)} <br>請稍後再試，或檢查 API 網址是否變更。<br><a href='/road'>返回重試</a>"
+            
+    return '<h2>台中市十大肇事路口查詢</h2><form method="post">請輸入路名：<input name="road_name" placeholder="例如: 台灣大道" required><button type="submit">查詢</button></form>'
+
+
+
+
+
+
 
 
 # --- (1) spiderMovie: 爬取並存到資料庫 ---
