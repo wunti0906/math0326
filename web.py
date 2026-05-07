@@ -44,8 +44,40 @@ def index():
     link += "<a href='/spiderMovie'>爬取並更新電影資料到資料庫</a><br>"
     link += "<br><a href='/searchMovie'>搜尋資料庫中的電影</a><hr>"
     link += "<br><a href='/road'>台中市十大肇事路口</a><br>"
-    link += "<br><a href='/road1'>肇事路口查詢 (進階表單版)</a><hr>"
+    link += "<br><a href='/road1'>肇事路口查詢 (進階表單版)</a><br>"
+    link += "<br><a href='/weather'>天氣預報查詢</a><hr>"
     return link
+
+@app.route("/weather", methods=["GET", "POST"])
+def weather():
+    result = ""
+    city = request.values.get("city", "臺中市")
+    city = city.replace("台", "臺")
+   
+    if request.method == "POST" or request.values.get("city"):
+        token = "rdec-key-123-45678-011121314" # 請確保 token 正確
+        url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization={token}&format=JSON&locationName={city}"
+       
+        try:
+            data = requests.get(url, timeout=10)
+            json_data = data.json()
+            loc_data = json_data["records"]["location"][0]
+            weather_state = loc_data["weatherElement"][0]["time"][0]["parameter"]["parameterName"]
+            rain_rate = loc_data["weatherElement"][1]["time"][0]["parameter"]["parameterName"]
+            result = f"<h3>{city} 目前天氣：{weather_state}，降雨機率：{rain_rate}%</h3>"
+        except:
+            result = "<p style='color:red;'>查無此縣市資料或 API Token 失效。</p>"
+
+    html = f"""
+    <h2>縣市天氣查詢</h2>
+    <form action="/weather" method="get">
+        請輸入縣市名稱：<input type="text" name="city" placeholder="例如：臺中市">
+        <button type="submit">查詢</button>
+    </form>
+    {result}
+    <br><a href="/">返回首頁</a>
+    """
+    return html
 
 
 @app.route("/road", methods=["GET", "POST"])
@@ -54,21 +86,21 @@ def road():
     R = "<h1>十大肇事路口(113年10月)林彣媞</h1><br>"
     url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
     headers = {'User-Agent': 'Mozilla/5.0'}
-    
+   
     try:
         # verify=False 解決憑證問題, timeout=10 防止卡死
         response = requests.get(url, headers=headers, verify=False, timeout=10)
         JsonData = response.json()
-        
+       
         # 取得網址參數 q
         Road_query = request.args.get("q", "")
         found = False
-        
+       
         for item in JsonData:
             if Road_query and Road_query in item.get("路口名稱", ""):
                 R += f"📍 <b>{item['路口名稱']}</b>，原因：{item['主要肇因']} <br>"
                 found = True
-        
+       
         if not found:
             if Road_query == "":
                 R += "<i>請在網址後加上 ?q=路名 來搜尋，或查看下方前 10 筆列表：</i><br><br>"
@@ -88,32 +120,32 @@ def road1():
     # 使用 request.values 可以同時接收 GET 和 POST 的 q
     q = request.values.get("q", "")
     results = ""
-    
+   
     if q:
         url = "https://datacenter.taichung.gov.tw/swagger/OpenData/a1b899c0-511f-4e3d-b22b-814982a97e41"
         headers = {'User-Agent': 'Mozilla/5.0'}
-        
+       
         # 重試機制
         for i in range(3):
             try:
                 res = requests.get(url, headers=headers, timeout=15, verify=False)
                 json_data = res.json()
                 found = False
-                
+               
                 # 建立表格 HTML
                 results = "<h3>查詢結果：</h3><table border='1' style='border-collapse:collapse; width:100%; text-align:left;'>"
                 results += "<tr style='background-color:#f2f2f2;'><th>路口名稱</th><th>件數</th><th>原因</th></tr>"
-                
+               
                 for item in json_data:
                     if q in item.get("路口名稱", ""):
                         found = True
                         results += f"<tr><td>{item['路口名稱']}</td><td>{item.get('總件數', 'N/A')}</td><td>{item.get('主要肇因', 'N/A')}</td></tr>"
                 results += "</table>"
-                
-                if not found: 
+               
+                if not found:
                     results = f"<p style='color:orange;'>查無關於「{q}」的資料。</p>"
                 break # 成功則跳出迴圈
-                
+               
             except Exception as e:
                 if i < 2: # 還有重試機會
                     time.sleep(1)
@@ -131,6 +163,7 @@ def road1():
     <br><a href="/">回首頁</a>
     """
     return html
+
 
 
 
