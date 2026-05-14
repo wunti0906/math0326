@@ -52,19 +52,32 @@ def index():
 
 
 
-@app.route("/webhook2", methods=["POST"])
-def webhook2():
-    # build a request object
-    req = request.get_json(force=True)
-    # fetch queryResult from json
-    action =  req.get["queryResult"].get["action"]
-    #msg =  req.get["queryResult"].get["queryText"]
-    #info = "我是林彣媞設計的機器人,動作：" + action + "； 查詢內容：" + msg
-    if (action == "rateChoice"):
-        rate =  req.get["queryResult"].get["parameters"].get["rate"]
-        info = "您選擇的電影分級是：" + rate
-    return make_response(jsonify({"fulfillmentText": info}))
 
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    req = request.get_json(force=True)
+    action = req["queryResult"]["action"]
+   
+    if action == "rateChoice":
+        rate = req["queryResult"]["parameters"]["rate"]
+       
+        db = firestore.client()
+        collection_ref = db.collection("本週新片含分級")
+        docs = collection_ref.where("rate", "==", rate).get()
+       
+        res = f"我是林彣媞設計的機器人，您找出的本週 {rate} 電影有：\n"
+        found = False
+        for doc in docs:
+            found = True
+            m = doc.to_dict()
+            res += f"- {m.get('title')} (片長：{m.get('showLength')} 分)\n"
+       
+        if not found:
+            res = f"抱歉，本週資料庫中沒有標記為 {rate} 的電影喔！"
+           
+        return make_response(jsonify({"fulfillmentText": res}))
+
+    return make_response(jsonify({"fulfillmentText": "Webhook 運作正常，但未觸發特定動作。"}))
 
 
 
