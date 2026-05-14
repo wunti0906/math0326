@@ -28,7 +28,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    link = "<h1>歡迎進入林彣媞的網站</h1>"
+    link = "<h1>歡迎進入林彣媞的網站0514</h1>"
     link += "<a href=/mis>課程</a><hr>"
     link += "<a href=/today>現在日期時間</a><hr>"
     link += "<a href=/me>關於我</a><hr>"
@@ -48,6 +48,7 @@ def index():
     link += "<br><a href='/weather'>天氣預報查詢</a><hr>"
     link += "<br><a href='/rate'>本週新片DB</a><br>"
     return link
+
 
 
 
