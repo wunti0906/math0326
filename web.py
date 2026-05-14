@@ -46,19 +46,22 @@ def index():
     link += "<br><a href='/road'>台中市十大肇事路口</a><br>"
     link += "<br><a href='/road1'>肇事路口查詢 (進階表單版)</a><br>"
     link += "<br><a href='/weather'>天氣預報查詢</a><hr>"
-    link += "<br><a href='/rate'>本週新片</a><br>"
+    link += "<br><a href='/rate'>本週新片DB</a><br>"
     return link
 
 
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
+@app.route("/webhook2", methods=["POST"])
+def webhook2():
     # build a request object
     req = request.get_json(force=True)
     # fetch queryResult from json
-    action =  req.get("queryResult").get("action")
-    msg =  req.get("queryResult").get("queryText")
-    info = "動作：" + action + "； 查詢內容：" + msg
+    action =  req.get["queryResult"].get["action"]
+    #msg =  req.get["queryResult"].get["queryText"]
+    #info = "我是林彣媞設計的機器人,動作：" + action + "； 查詢內容：" + msg
+    if (action == "rateChoice"):
+        rate =  req.get["queryResult"].get["parameters"].get["rate"]
+        info = "您選擇的電影分級是：" + rate
     return make_response(jsonify({"fulfillmentText": info}))
 
 
